@@ -85,18 +85,19 @@ class TokenGenerationCallback():
     def __call__(self, token) -> bool:
         pass
 
+    def reset(self):
+        pass
+
 
 class TextCollectorCallback(TokenGenerationCallback):
     
-    def __init__(self, device, generation_length: int = -1, termination_sequences: list = ["A:", "B:", "<|endoftext|>"]):
+    def __init__(self, device, generation_length: int = 20, termination_sequences: list = ["A:", "B:", "<|endoftext|>"]):
         self.generation_length = generation_length
         self.termination_sequences = termination_sequences
-        self.termination_token_sequences = []
-
+        self.device = device
         self.enc = tiktoken.get_encoding("gpt2")
-        self.generated_text = ""
-        self.generated_idx = torch.empty((1, 0), device=device)
-        self.num_generated_tokens = 0
+        self.reset()
+        
         
     def __call__(self, token) -> bool:
         self.generated_idx = torch.cat((self.generated_idx, token), dim=1) 
@@ -115,6 +116,13 @@ class TextCollectorCallback(TokenGenerationCallback):
                 return True
 
         return False
+    
+    def reset(self):
+        self.termination_token_sequences = []
+
+        self.generated_text = ""
+        self.generated_idx = torch.empty((1, 0), device=self.device)
+        self.num_generated_tokens = 0
 
     def get_text(self):
         return self.generated_text
@@ -125,19 +133,12 @@ class TextCollectorCallback(TokenGenerationCallback):
 
 class PrintTokensCallback(TokenGenerationCallback):
     
-    def __init__(self, device, generation_length: int = -1, termination_sequences: list = ["A:", "B:", "<|endoftext|>"]):
+    def __init__(self, device, generation_length: int = 1024, termination_sequences: list = ["A:", "B:", "<|endoftext|>"]):
         self.generation_length = generation_length
         self.termination_sequences = termination_sequences
-        self.termination_token_sequences = []
-
+        self.device = device
+        
         self.enc = tiktoken.get_encoding("gpt2")
-        self.generated_tokens = []
-        self.generated_text = ""
-        self.generated_idx = torch.empty((1, 0), device=device)
-        self.num_generated_tokens = 0
-        self.num_generated_chars = 0
-        self.token_to_print_id = 0
-        self.num_printed_chars = 0
 
         self.longest_term_sequence_length = 0
         for seq in termination_sequences:
@@ -148,6 +149,7 @@ class PrintTokensCallback(TokenGenerationCallback):
         self.generated_idx = torch.cat((self.generated_idx, token), dim=1) 
 
         decoded_token = self.enc.decode(token[0, :].tolist())
+
         self.generated_tokens.append(decoded_token)
         self.generated_text += decoded_token
 
@@ -155,14 +157,6 @@ class PrintTokensCallback(TokenGenerationCallback):
         self.num_generated_chars += len(decoded_token)
 
         terminate = False
-
-
-        # length = 0
-        # for i in range(self.generated_tokens):
-        #     length += self.generated_tokens[-i]
-        #     if length >= self.longest_term_sequence_length:
-
-
         
         num_chars_to_print = self.num_generated_chars - self.longest_term_sequence_length
 
@@ -173,27 +167,47 @@ class PrintTokensCallback(TokenGenerationCallback):
         for seq in self.termination_sequences:
             if self.generated_text[-len(seq):] == seq:
                 self.generated_text = self.generated_text[:-len(seq)]
-                self.generated_tokens[-1] = self.generated_tokens[-1][:-len(seq)]
+
+                chars_to_remove = len(seq)
+                while chars_to_remove > 0:
+                    if len(self.generated_tokens[-1]) <= chars_to_remove:
+                        chars_to_remove -= len(self.generated_tokens[-1])
+                        self.generated_tokens = self.generated_tokens[:-1]
+                        continue
+                    else:
+                        self.generated_tokens[-1] = self.generated_tokens[-1][:-chars_to_remove]
+                        break
                 num_chars_to_print = self.num_generated_chars - len(seq)
                 terminate = True
                 break
         
-        if self.num_generated_chars > self.longest_term_sequence_length:
+        if (self.num_generated_chars > self.longest_term_sequence_length) or (terminate):
             while self.token_to_print_id < len(self.generated_tokens):
                 if self.num_printed_chars + len(self.generated_tokens[self.token_to_print_id]) > num_chars_to_print:
                     break
-                
+
                 print(self.generated_tokens[self.token_to_print_id], end="")
                 self.num_printed_chars += len(self.generated_tokens[self.token_to_print_id])
                 self.token_to_print_id += 1
                 
         return terminate
 
+    def reset(self):
+        self.termination_token_sequences = []
+        self.generated_tokens = []
+        self.generated_text = ""
+        self.generated_idx = torch.empty((1, 0), device=self.device).long()
+        self.num_generated_tokens = 0
+        self.num_generated_chars = 0
+        self.token_to_print_id = 0
+        self.num_printed_chars = 0
+
     def get_text(self):
         return self.generated_text
     
     def get_idx(self):
         return self.generated_idx
+    
 
 
 @dataclass
@@ -328,7 +342,8 @@ class DialogGPT2(nn.Module):
         
         return xcol
     
-    def generate_seq(self, idx, device, callback: TokenGenerationCallback, random_seed=42):
+    def generate_seq(self, idx, device, callback: TokenGenerationCallback, random_seed=234):
+        callback.reset()
         while True:
             token = self.generate_token(idx, device, random_seed)
             termenation_state = callback(token)
