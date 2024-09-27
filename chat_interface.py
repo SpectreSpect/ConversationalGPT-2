@@ -76,6 +76,8 @@ def chat_with_model(model, random_seed=42):
 
 
 def load_model(model_dir: str):
+    os.makedirs("models", exist_ok=True)
+
     model_path = os.path.join(model_dir, "convgpt2/dialog_gpt2/last.pt")
     if not os.path.exists(os.path.join(model_dir, "convgpt2")):
         path = kagglehub.model_download("spectrespect/convgpt2/pyTorch/default")
