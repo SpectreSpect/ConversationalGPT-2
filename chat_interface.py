@@ -2,6 +2,9 @@ from src.models.conversational_gpt2.conversational_gpt2 import ConvGPT2, TextCol
 import torch
 from dataclasses import dataclass
 import tiktoken
+import kagglehub
+import os
+import shutil
 
 @dataclass
 class GPTConfig:
@@ -72,13 +75,23 @@ def chat_with_model(model, random_seed=42):
         dialogue += text_collector_callback.get_text()
 
 
-if __name__ == "__main__":
-    device = "cuda"
+def load_model(model_dir: str):
+    model_path = os.path.join(model_dir, "convgpt2/dialog_gpt2/last.pt")
+    if not os.path.exists(os.path.join(model_dir, "convgpt2")):
+        path = kagglehub.model_download("spectrespect/convgpt2/pyTorch/default")
+        shutil.move(path, model_dir)
+    return model_path
 
-    model, optimizer_sd, step, epoch = ConvGPT2.from_checkpoint("models/conversational_gpt2/last.pt")
+
+if __name__ == "__main__":
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model_path = load_model("models")
+
+    model, optimizer_sd, step, epoch = ConvGPT2.from_checkpoint(model_path)
     model.to(device)
 
     text_collector_callback = PrintTokensCallback(device)
 
     chat_with_model(model, 42)
-        
+    
