@@ -219,7 +219,7 @@ class GPTConfig:
     n_embd: int = 768
 
 
-class DialogGPT2(nn.Module):
+class ConvGPT2(nn.Module):
 
     def __init__(self, config):
         super().__init__()
@@ -342,7 +342,7 @@ class DialogGPT2(nn.Module):
         
         return xcol
     
-    def generate_seq(self, idx, device, callback: TokenGenerationCallback, random_seed=234):
+    def generate_seq(self, idx, device, callback: TokenGenerationCallback, random_seed=42):
         callback.reset()
         while True:
             token = self.generate_token(idx, device, random_seed)

@@ -1,4 +1,4 @@
-from src.models.dialog_gpt2.dialog_gpt2 import DialogGPT2, TextCollectorCallback, PrintTokensCallback
+from src.models.conversational_gpt2.conversational_gpt2 import ConvGPT2, TextCollectorCallback, PrintTokensCallback
 import torch
 from dataclasses import dataclass
 import tiktoken
@@ -48,7 +48,7 @@ def get_str_slice(array: list, slice):
     return output_string
 
 
-def chat_with_model(model):
+def chat_with_model(model, random_seed=42):
     text_collector_callback = PrintTokensCallback(device)
     enc = tiktoken.get_encoding("gpt2")
     
@@ -57,7 +57,7 @@ def chat_with_model(model):
     dialogue = ""
     while True:
         user_text = input("You: ")
-        dialogue = "A: " + user_text + "B:"
+        dialogue += "A: " + user_text + "B:"
                 
         if len(dialogue) > context_size:
             dialogue = dialogue[:-context_size:]
@@ -66,7 +66,7 @@ def chat_with_model(model):
 
         tokens = enc.encode(dialogue)
         tokens = torch.tensor(tokens).to(device).unsqueeze(0)
-        model.generate_seq(tokens, device, text_collector_callback)
+        model.generate_seq(tokens, device, text_collector_callback, random_seed=random_seed)
         print("")
 
         dialogue += text_collector_callback.get_text()
@@ -75,10 +75,10 @@ def chat_with_model(model):
 if __name__ == "__main__":
     device = "cuda"
 
-    model, optimizer_sd, step, epoch = DialogGPT2.from_checkpoint("models/dialog_gpt2/last_test.pt")
+    model, optimizer_sd, step, epoch = ConvGPT2.from_checkpoint("models/conversational_gpt2/last.pt")
     model.to(device)
 
     text_collector_callback = PrintTokensCallback(device)
 
-    chat_with_model(model)
+    chat_with_model(model, 42)
         
